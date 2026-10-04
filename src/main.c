@@ -104,21 +104,37 @@ static void button_pressed(const struct device *port,
 
 static int setup_buttons(void)
 {
+	int err = 0;
 	for (int i = 0; i < BUTTON_COUNT; i++) {
 		/* GPIO_INPUT conserva el pull-up y la polaridad declarados por la placa. */
-		if (!gpio_is_ready_dt(&buttons[i]) ||
-		    gpio_pin_configure_dt(&buttons[i], GPIO_INPUT) != 0) {
-			return -1;
+		if (!gpio_is_ready_dt(&buttons[i])) {
+			printk("Error al iniciar los GPIO. Boton: %d\n", i);
+			return -ENODEV;
+		}
+
+		err = gpio_pin_configure_dt(&buttons[i], GPIO_INPUT);			
+		if (err != 0)
+		{
+			printk("Error al configurar el canal el boton %d. Error: %d\n", i, err);
+			return err;
 		}
 
 		gpio_init_callback(&button_callbacks[i], button_pressed,
 				   BIT(buttons[i].pin));
 
 		/* Una pulsacion genera la interrupcion que tambien despierta al MCU. */
-		if (gpio_add_callback(buttons[i].port, &button_callbacks[i]) != 0 ||
-		    gpio_pin_interrupt_configure_dt(&buttons[i],
-						    GPIO_INT_EDGE_TO_ACTIVE) != 0) {
-			return -1;
+		err = gpio_add_callback(buttons[i].port, &button_callbacks[i]);
+
+		if (err != 0) {
+			printk("Error al configurar el callback del boton %d. Error: %d\n", i, err);
+			return err;
+		}
+
+		err = gpio_pin_interrupt_configure_dt(&buttons[i],
+						    GPIO_INT_EDGE_TO_ACTIVE);
+		if (err != 0) {
+			printk("Error al configurar la interrupcion del boton %d. Error: %d\n", i, err);
+			return err;
 		}
 	}
 
@@ -154,35 +170,33 @@ static int read_light(uint16_t *average)
 	return 0;
 }
 
-/*
-	Función de init separada del main para capturar errores y hacer las
-	operaciones atómicas.
-*/
-int init(void)
+/* Función de init separada del main. */
+static int init(void)
 {
-	int status = 0;
+	int err = 0;
 
 	if (!adc_is_ready_dt(&light_adc)) {
 		printk("Error al iniciar el ADC\n");
-		return ENODEV;
+		return -ENODEV;
 	}
-	status = adc_channel_setup_dt(&light_adc);
-	if (0 != status) {
-		printk("Error al configurar el canal el ADC. Error: %d\n", status);
-		return status;
+	err = adc_channel_setup_dt(&light_adc);
+	if (err != 0) {
+		printk("Error al configurar el canal el ADC. Error: %d\n", err);
+		return err;
 	}
 
 	/* El firmware siempre empieza sin restricciones, en modo ahorro. */
 	k_work_init(&mode_work, change_mode);
 	set_energy_mode(MODE_SAVING);
 
-	status = setup_buttons();
-	if (setup_buttons() != 0) {
-		printk("Error al iniciar los botones\n. Error: %d", status);
-		return status;
+	err = setup_buttons();
+	if (err != 0) {
+		printk("Error al iniciar los botones. Error: %d\n", err);
+		return err;
 	}
 
-	return status;	
+	printk("App iniciada\n");
+	return 0;	
 }
 
 int main(void)
@@ -193,9 +207,10 @@ int main(void)
 	int status = 0;
 
 	status =  init();
-	if (0 != status)
+	if (status != 0)
 	{
 		printk("Error al iniciar la configuracion inicial. Error: %d\n", status);
+		return status;
 	}
 
 	printk("B1: referencia; B2: respuesta rapida; B3: ahorro\n");
