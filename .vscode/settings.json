@@ -6,6 +6,13 @@
     "ZEPHYR_DIR": "C:/ZephyrUPM/zephyrproject-4.4"
   },
 
+  "terminal.integrated.env.linux": {
+    "PROJECT_DIR": "${workspaceFolder}",
+    "BUILD_DIR": "${workspaceFolder}/build",
+    "CACHE_DIR": "${workspaceFolder}/.zephyr-cache/",
+    "ZEPHYR_BOARD": "nucleo_wl55jc"
+  },
+
   "C_Cpp.default.compileCommands":
     "${workspaceFolder}/build/compile_commands.json",
 

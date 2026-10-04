@@ -67,6 +67,75 @@
         "panel": "dedicated",
         "clear": true
       }
+    },
+
+    // ============================================================
+    // LINUX 
+    // ============================================================
+
+    {
+      "label": "Linux: Build",
+      "type": "shell",
+      "command": "west",
+      "args": [
+        "build",
+        "-p", "auto",
+        "-b", "$ZEPHYR_BOARD",
+        "$PROJECT_DIR",
+        "-d", "$BUILD_DIR",
+        "--",
+        "-DUSER_CACHE_DIR=$CACHE_DIR",
+        "-DBOARD_FLASH_RUNNER=openocd",
+        "-DBOARD_DEBUG_RUNNER=openocd",
+        "-DUSE_CCACHE=0"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Linux: Flash",
+      "type": "shell",
+      "command": "west",
+      "args": [
+        "flash",
+        "-d", "$BUILD_DIR",
+        "--cmd-pre-init",
+        "reset_config srst_only srst_nogate connect_assert_srst"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Linux: List Serial Ports",
+      "type": "shell",
+      "command": "python -m serial.tools.list_ports -v USB",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Linux: Clean Build",
+      "type": "shell",
+      "command": "rm -rf ./build/",
+      "problemMatcher": []
+    },
+    {
+      "label": "Linux: Clean Cache",
+      "type": "shell",
+      "command": "rm -rf ./.zephyr-cache/",
+      "problemMatcher": []
     }
   ],
   "inputs": [
