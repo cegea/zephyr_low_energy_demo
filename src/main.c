@@ -154,24 +154,48 @@ static int read_light(uint16_t *average)
 	return 0;
 }
 
-int main(void)
+/*
+	Función de init separada del main para capturar errores y hacer las
+	operaciones atómicas.
+*/
+int init(void)
 {
-	/* La siguiente muestra tiene una fecha fija para no acumular retrasos. */
-	int64_t next_sample = k_uptime_get();
-	uint32_t sample_count = 0;
+	int status = 0;
 
-	if (!adc_is_ready_dt(&light_adc) || adc_channel_setup_dt(&light_adc) != 0) {
+	if (!adc_is_ready_dt(&light_adc)) {
 		printk("Error al iniciar el ADC\n");
-		return 0;
+		return ENODEV;
+	}
+	status = adc_channel_setup_dt(&light_adc);
+	if (0 != status) {
+		printk("Error al configurar el canal el ADC. Error: %d\n", status);
+		return status;
 	}
 
 	/* El firmware siempre empieza sin restricciones, en modo ahorro. */
 	k_work_init(&mode_work, change_mode);
 	set_energy_mode(MODE_SAVING);
 
+	status = setup_buttons();
 	if (setup_buttons() != 0) {
-		printk("Error al iniciar los botones\n");
-		return 0;
+		printk("Error al iniciar los botones\n. Error: %d", status);
+		return status;
+	}
+
+	return status;	
+}
+
+int main(void)
+{
+	/* La siguiente muestra tiene una fecha fija para no acumular retrasos. */
+	int64_t next_sample = k_uptime_get();
+	uint32_t sample_count = 0;
+	int status = 0;
+
+	status =  init();
+	if (0 != status)
+	{
+		printk("Error al iniciar la configuracion inicial. Error: %d\n", status);
 	}
 
 	printk("B1: referencia; B2: respuesta rapida; B3: ahorro\n");
