@@ -4,14 +4,22 @@ source "Kconfig.zephyr"
 
 menu "Demo de energia"
 
+# cada cuanto trabaja
 config DEMO_SAMPLE_INTERVAL_MS
 	int "Intervalo entre inicios de medida (ms)"
 	range 100 60000
 	default 1000
 
-config DEMO_RESPONSE_LATENCY_US
-	int "Latencia maxima solicitada en modo respuesta (us)"
-	range 1 1000000
-	default 5
+# como espera main hasta el siguiente periodo, de una vez o en trozos
+config DEMO_SLEEP_SLICE_US
+	int "Tramo maximo de sueno entre muestras (us), 0 = un solo sueño"
+	range 0 1000000
+	default 0
+	help
+	  0 duerme de una vez hasta la siguiente muestra: la politica ve casi
+	  todo el intervalo y elige STOP2. Con un valor distinto, main duerme a
+	  tramos de esta duracion y la politica solo ve el tramo, de modo que
+	  la residencia minima de cada STOP decide cual se usa. Con el tick de
+	  250 us de esta placa conviene probar multiplos de 250.
 
 endmenu
