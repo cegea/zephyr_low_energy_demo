@@ -10,8 +10,11 @@ la aplicacion entrega a la politica de energia de Zephyr.
 
 ## Cableado
 
-El KY-018 de la foto contiene una LDR y una resistencia `103` de 10 kohm. Su
-salida `S` es analogica y no necesita componentes externos adicionales.
+El KY-018 contiene una LDR y una resistencia `103` de 10 kohm. Su salida `S`
+es analogica y no necesita componentes externos adicionales.
+
+<img src="docs/images/KY-018.svg" alt="Modulo KY-018" width="200">
+
 
 | KY-018 | NUCLEO-WL55JC1 |
 |---|---|
@@ -19,8 +22,8 @@ salida `S` es analogica y no necesita componentes externos adicionales.
 | `+` | `3V3` |
 | `S` | `A0`, que corresponde a PB1/ADC1_IN5 |
 
-Con el modulo orientado como en la foto original, los pines son `-`, `+` y `S`
-de arriba abajo. Como existen copias con serigrafia incorrecta, conviene
+Con la LDR hacia arriba, como en la imagen, los pines son `S`, `+` y `-` de
+izquierda a derecha. Como existen copias con serigrafia incorrecta, conviene
 comprobarlo antes con un multimetro. Alimente siempre el modulo con 3.3 V y
 verifique que `S` permanece entre 0 y 3.3 V. No use 5 V.
 
