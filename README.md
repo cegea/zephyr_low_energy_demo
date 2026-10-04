@@ -73,7 +73,7 @@ Muestra 1: 602
 ```
 
 Al iluminar y tapar la LDR, los valores deben cambiar. Cada pulsacion imprime
-el nombre del nuevo modo y las muestras continúan apareciendo.
+el nombre del nuevo modo y las muestras continuan apareciendo.
 
 ## Medicion de corriente
 
