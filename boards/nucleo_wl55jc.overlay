@@ -23,20 +23,8 @@
 };
 
 /*
- * Zephyr 4.4.2 declara STOP0/1/2 para STM32WL, pero no proporciona
- * exit-latency-us. Sin estos valores una peticion de latencia no filtraria
- * ningun estado. Los valores 4/8/9 us son metadata experimental, redondeada
- * con margen a partir de los tiempos de despertar del silicio publicados por
- * ST. No sustituyen una caracterizacion extremo a extremo de esta aplicacion.
+ * Los estados STOP0/1/2 se usan tal como los declara stm32wl.dtsi
+ * (suspend-to-idle, substate-id 1/2/3, min-residency-us 100/500/900, sin
+ * exit-latency-us). El modo respuesta bloquea STOP1 y STOP2 por substate en
+ * main.c, asi que no hace falta inventar latencias de salida aqui.
  */
-&stop0 {
-	exit-latency-us = <4>;
-};
-
-&stop1 {
-	exit-latency-us = <8>;
-};
-
-&stop2 {
-	exit-latency-us = <9>;
-};
