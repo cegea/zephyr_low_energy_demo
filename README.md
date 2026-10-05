@@ -4,9 +4,11 @@ Demo para la `NUCLEO-WL55JC1` y un fotoresistor `KY-018`. Lee la luz por el
 ADC, muestra el resultado por el puerto serie y permite cambiar la politica de
 energia con los tres botones de la placa.
 
-No utiliza BLE, LoRa, radio ni LED. En todos los modos se realizan las mismas
-ocho conversiones ADC cada 1000 ms. Lo unico que cambia es la restriccion que
-la aplicacion entrega a la politica de energia de Zephyr.
+No utiliza BLE, LoRa, radio ni LED. Siempre se realizan las mismas ocho
+conversiones ADC cada 5000 ms. Lo unico que cambia es el estado mas profundo
+que la aplicacion permite elegir a la politica de energia de Zephyr. Cada muestra imprime
+tambien cuantas veces ha entrado el sistema en STOP0, STOP1 y STOP2, para poder
+ver la decision de la politica y no solo suponerla.
 
 ## Cableado
 
