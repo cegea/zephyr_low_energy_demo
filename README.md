@@ -29,23 +29,106 @@ izquierda a derecha. Como existen copias con serigrafia incorrecta, conviene
 comprobarlo antes con un multimetro. Alimente siempre el modulo con 3.3 V y
 verifique que `S` permanece entre 0 y 3.3 V. No use 5 V.
 
-## Modos
+## Botones
 
-El firmware arranca en ahorro y cambia de modo sin reiniciar ni volver a
-flashear:
+Los botones fijan el estado mas profundo que la politica puede elegir. La
+aplicacion no define modos propios: usa los estados de Zephyr y los bloquea con
+`pm_policy_state_lock_get()`. El firmware arranca sin bloqueos, como Zephyr por
+defecto (hasta STOP2), y el limite cambia sin reiniciar ni volver a flashear:
 
-| Boton | Modo | Comportamiento |
-|---|---|---|
-| `B1/SW1` | referencia | bloquea los estados de energia gestionados por PM |
-| `B2/SW2` | respuesta rapida | solicita una latencia maxima de salida de 5 us |
-| `B3/SW3` | ahorro | deja la seleccion de estado a la politica de Zephyr |
+| Boton | Efecto |
+|---|---|
+| `B1/SW1` | `active`: sin STOP. Linea base para medir corriente |
+| `B2/SW2` | barrido: cada pulsacion pasa al siguiente limite, STOP0 -> STOP1 -> STOP2 -> STOP0. Desde `active` empieza en STOP0 |
+| `B3/SW3` | sin uso (no se configura su interrupcion) |
 
-Al cambiar de modo se retira primero la restriccion anterior. Pulsar de nuevo
-el boton del modo actual no acumula restricciones.
+Locks de Zephyr que quedan tomados con cada limite:
 
-Los valores de latencia de STOP0, STOP1 y STOP2 incluidos en el overlay son
-metadata experimental para esta comparacion. No representan una medicion de
-latencia extremo a extremo.
+| Limite | Locks |
+|---|---|
+| `active` | substates 1, 2 y 3 |
+| hasta STOP0 (`suspend-to-idle`/1) | substates 2 y 3 |
+| hasta STOP1 (`suspend-to-idle`/2) | substate 3 |
+| hasta STOP2 (`suspend-to-idle`/3) | ninguno |
+
+Los locks de Zephyr son contadores: cada `get` necesita su `put`. Al cambiar de
+limite solo se suelta lo que deja de estar bloqueado y se toma lo que pasa a
+estarlo, asi que nunca se acumulan bloqueos.
+
+Las pulsaciones a menos de 200 ms de la anterior se ignoran. Un boton mecanico
+rebota y genera varios flancos por pulsacion; sin ese filtro, una sola
+pulsacion de B2 podria avanzar varios pasos del barrido.
+
+## Estados de energia
+
+Zephyr define estados genericos (`enum pm_state`); cada SoC declara en el
+Devicetree cuales tiene y como se llaman en su hardware. En el STM32WL
+(`dts/arm/st/wl/stm32wl.dtsi`):
+
+| Modo ST | Estado Zephyr | `substate-id` | `min-residency-us` |
+|---|---|---|---|
+| STOP0 | `suspend-to-idle` | 1 | 100 |
+| STOP1 | `suspend-to-idle` | 2 | 500 |
+| STOP2 | `suspend-to-idle` | 3 | 900 |
+
+Standby y Shutdown de ST no estan declarados, asi que Zephyr nunca los usa.
+Ojo: el estado `standby` de Zephyr no es el Standby de ST.
+
+Mientras `main` duerme, el hilo idle pide a la politica un estado. La politica
+por defecto elige el mas profundo cuya residencia minima cabe en el tiempo
+hasta el siguiente timeout y que no este bloqueado. El sistema despierta por
+LPTIM1, el tick de bajo consumo que sigue funcionando en STOP, o por un boton
+(EXTI).
+
+Contadores medidos en la placa, por muestra:
+
+| Limite | Intervalo | STOP0 | STOP1 | STOP2 |
+|---|---|---|---|---|
+| hasta STOP2 (arranque) | 5000 ms | 0 | 0 | 4 |
+| hasta STOP1 | 5000 ms | 0 | 4 | 0 |
+| hasta STOP0 | 5000 ms | 4 | 0 | 0 |
+| hasta STOP2 | 1000 ms | 0 | 0 | 1 |
+| hasta STOP0 | 1000 ms | 1 | 0 | 0 |
+| `active` | 1000 ms | 0 | 0 | 0 |
+
+Con 5000 ms hay varias entradas por muestra porque el LPTIM no puede programar
+un sueno tan largo: es un contador de 16 bits y con
+`CONFIG_STM32_LPTIM_TIMEBASE=0xF9FF` a 32 kHz su maximo es 2 s
+(`drivers/timer/stm32_lptim_timer.c`). El kernel despierta al menos cada 2 s
+para reprogramarlo, y cada despertar es una entrada mas en STOP. Eso explica 3
+entradas; la cuarta no esta analizada.
+
+La primera muestra tras el arranque muestra ceros porque todavia no se ha
+dormido ninguna vez. La muestra justo despues de pulsar un boton mezcla el
+limite anterior y el nuevo.
+
+## Experimento de residencia
+
+Con `CONFIG_DEMO_SLEEP_SLICE_US` distinto de 0, `main` duerme a tramos cortos
+en lugar de una sola vez. La politica solo ve el tramo, no el segundo
+completo, y tiene que elegir estados menos profundos:
+
+```sh
+west build -b nucleo_wl55jc . -d build-750 -- \
+  -DBOARD_FLASH_RUNNER=openocd -DCONFIG_DEMO_SLEEP_SLICE_US=750
+```
+
+Entradas por segundo medidas sin limite (hasta STOP2):
+
+| Tramo | STOP0 | STOP1 | STOP2 |
+|---|---|---|---|
+| 0 (un solo sueno) | 0 | 0 | 1 |
+| 250 us | ~990 | ~990 | 0 |
+| 500 us | ~390 | ~1195 | 0 |
+| 750 us | 0 | ~660 | ~660 |
+| 1000 us | 0 | ~420 | ~715 |
+
+El tick de esta placa es de 250 us (`CONFIG_SYS_CLOCK_TICKS_PER_SEC=4000`).
+`K_USEC` redondea hacia arriba a ticks (`Z_TIMEOUT_US`, `sys/clock.h`) y un
+timeout relativo anade un tick mas para garantizar la espera minima
+(`kernel/timeout.c`). Por eso un mismo tramo no corresponde a un solo estado:
+el tiempo que ve la politica depende de en que punto del tick empieza el
+sueno. El reparto exacto entre estados no esta analizado.
 
 ## Compilar y flashear
 
@@ -65,17 +148,32 @@ Desde PowerShell, en la raiz del proyecto:
 Tambien estan disponibles las tareas `Demo: Build`, `Demo: Flash` y
 `Serial Monitor` en VS Code.
 
+En Linux, dentro del entorno con `west`, estan las tareas `Linux: Build` y
+`Linux: Flash`, o directamente:
+
+```sh
+west build -b nucleo_wl55jc . -- -DBOARD_FLASH_RUNNER=openocd
+west flash --cmd-pre-init "reset_config srst_only srst_nogate connect_assert_srst"
+```
+
+El `--cmd-pre-init` hace falta porque este firmware pasa casi todo el tiempo
+en STOP2, donde el puerto de depuracion no responde. Con `connect_assert_srst`
+OpenOCD mantiene el reset mientras se conecta, igual que `mode=UR` en
+STM32CubeProgrammer.
+
 El monitor serie utiliza `115200 8N1`. Una ejecucion normal se ve asi:
 
 ```text
-Modo: ahorro
-B1: referencia; B2: respuesta rapida; B3: ahorro
-Intervalo: 1000 ms; ADC: A0/PB1
-Muestra 1: 602
+Permitido: hasta suspend-to-idle/3 (STOP2)
+App iniciada
+B1: active; B2: barrido STOP0 -> STOP1 -> STOP2; B3: sin uso
+Intervalo: 5000 ms; tramo de sueno: 0 us; ADC: A0/PB1
+Muestra 1: 1218 | STOP0 0 STOP1 0 STOP2 0
+Muestra 2: 1328 | STOP0 0 STOP1 0 STOP2 4
 ```
 
 Al iluminar y tapar la LDR, los valores deben cambiar. Cada pulsacion imprime
-el nombre del nuevo modo y las muestras continuan apareciendo.
+el nuevo limite y las muestras continuan apareciendo.
 
 ## Medicion de corriente
 
@@ -92,18 +190,27 @@ Con la placa sin alimentacion:
 El amperimetro sustituye al jumper y debe permanecer conectado. Nunca lo
 conecte directamente entre 3V3 y GND.
 
-Para comparar modos, pulse y suelte el boton correspondiente y espere unos
-segundos antes de leer el multimetro. La consola permanece activa en todos los
-modos, por lo que los resultados son comparaciones relativas y no el consumo
-minimo absoluto del microcontrolador.
+Todo el consumo del STM32 pasa por la resistencia interna del amperimetro, y
+la caida de tension en ella se resta de la alimentacion. En la escala de uA esa
+resistencia es alta: los pocos mA del arranque o de cada despertar pueden bajar
+VDD por debajo del umbral de brown-out. Sintoma: el ST-LINK sigue midiendo
+3.3 V, pero no hay salida serie y no se puede flashear. Para flashear y
+arrancar, use la escala de mA o vuelva a poner JP1.
+
+Para comparar limites, pulse y suelte el boton correspondiente y espere unos
+segundos antes de leer el multimetro. La consola permanece activa siempre, por
+lo que los resultados son comparaciones relativas y no el consumo minimo
+absoluto del microcontrolador.
 
 Un multimetro convencional muestra principalmente un promedio y puede no
 capturar los pulsos breves de actividad del ADC y la UART.
 
 ## Archivos principales
 
-- `src/main.c`: lectura ADC, botones y restricciones de energia.
+- `src/main.c`: lectura ADC, botones, restricciones de energia y contadores
+  de STOP.
 - `prj.conf`: configuracion de Zephyr.
-- `boards/nucleo_wl55jc.overlay`: canal ADC y latencias de los estados PM.
+- `Kconfig`: intervalo de muestreo y tramo de sueno del experimento.
+- `boards/nucleo_wl55jc.overlay`: canal ADC.
 - `scripts/build.ps1`: compilacion.
 - `scripts/flash.ps1`: flasheo.
